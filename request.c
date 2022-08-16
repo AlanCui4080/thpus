@@ -87,6 +87,18 @@ int analyse_request_line(const struct request_header *req, const char *header)
         slog(LOG_DEBUG, "analyze_subj:%s", line->subject);
         slog(LOG_DEBUG, "analyze_va:%s", line->value);
     } while (*p1 != '\r');
+    if(req->method == METHOD_TRACE)
+    {
+        struct request_line* trace = malloc(sizeof(struct request_line));
+        list_init(trace);
+
+        trace->subject = "X-__TRACE_INFO";
+        trace->value = malloc(strlen(header)+1);
+        strcpy(trace->value,header);
+        
+        list_put(lp,trace);
+        slog(LOG_DEBUG,"added X-__TRACE_INFO");
+    }
     slog(LOG_DEBUG, "analyze_done");
 
     return 0;

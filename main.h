@@ -48,7 +48,9 @@ struct list_head
 #define list_init(v) \
     ((struct list_head*)(v))->next = NULL; \
     ((struct list_head*)(v))->prev = NULL;
-
+//the next node
+#define list_next(v) \
+    ((typeof(v))(((struct list_head*)(v))->next))
 enum{
     LOG_DEBUG = 1,
     LOG_INFO,

@@ -60,6 +60,7 @@ enum {
     METHOD_TRACE,
     METHOD_UNKNOW
 };
+#define METHOD_NR 10
 //method of version
 enum {
     HTTP_10 = 0,

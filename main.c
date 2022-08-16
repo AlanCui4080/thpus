@@ -43,7 +43,9 @@ void session_fastfail()
     slog(LOG_DEBUG, "quiting.");
 
     if(!session_fd)
+    {
         main_fastfail();
+    }
 
     slog(LOG_DEBUG, "trying to shutdown fd:%d", session_fd);
     if (shutdown(session_fd, SHUT_RDWR))

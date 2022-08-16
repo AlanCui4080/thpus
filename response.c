@@ -30,6 +30,25 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+void hook_void(struct response *res, const struct request_header *req);
+void hook_get(struct response *res, const struct request_header *req);
+void hook_head(struct response *res, const struct request_header *req);
+void hook_options(struct response *res, const struct request_header *req);
+void hook_trace(struct response *res, const struct request_header *req);
+
+const void (*method_hook[METHOD_NR])(struct response*, const struct request_header*) =\
+    {
+        hook_void, //CONNECT
+        hook_void, //DELETE
+        hook_get, //GET
+        hook_head, //HEAD
+        hook_options, //OPTIONS
+        hook_void, //PATCH
+        hook_void, //POST
+        hook_void, //PUT
+        hook_trace, //TRACE
+        hook_void, //Unknow
+    };
 int do_response(struct response *res)
 {
     slog(LOG_DEBUG, "responsee DID");
@@ -60,11 +79,14 @@ int do_response(struct response *res)
     else
         strcat(buf_feature, FEATURE_CLOSED_TEXT);
 
-    if (res->payload_size && (res->flag & SERVER_CONTENT_LEN))
+    if (res->flag & SERVER_CONTENT_LEN)
         sprintf(buf_feature + strlen(buf_feature), FEATURE_CONTENT_LEN "%llu\r\n", res->payload_size);
 
     if (res->flag & SERVER_SHOW_NAME)
-        sprintf(buf_feature + strlen(buf_feature), "Server: " SERVER_NAME ":%d.%d-%s", VERSION_MAJOR, VERSION_MINOR, VERSION_NAME);
+        sprintf(buf_feature + strlen(buf_feature), "Server: " SERVER_NAME ":%d.%d-%s\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_NAME);
+
+    if (res->flag & SERVER_SHOW_ALLOW)
+        strcat(buf_feature, FEATURE_ALLOW_TEXT);
 
     strcat(buf_feature, "\r\n");
 
@@ -86,6 +108,12 @@ int do_response(struct response *res)
 
     if (!(res->flag & SERVER_HAVE_PAYLOAD))
         goto end;
+
+    if (res->flag & SERVER_PAYLOAD_LOADED)
+    {
+        strcat(buf_res,res->payload_path);
+        goto end;
+    }
 
     slog(LOG_DEBUG, "trying to open:%s", res->payload_path);
     fp = fopen(res->payload_path, "rb");
@@ -110,12 +138,9 @@ end:
 }
 int build_response(struct response *res, const struct request_header *req)
 {
-    FILE *fp;
-
     slog(LOG_DEBUG, "req_version: %d", req->http_version);
     slog(LOG_DEBUG, "req_method: %d", req->method);
 
-    res->flag = SERVER_DEAFULT;
     if (req->http_version != HTTP_11)
     {
         res->response_code = HTTP_VERSION_NOT_SUPPPORT;
@@ -125,17 +150,58 @@ int build_response(struct response *res, const struct request_header *req)
     else
         res->http_version = req->http_version;
 
-    if (req->method != METHOD_GET)
+    method_hook[req->method](res,req);
+    
+    return 0;
+}
+void hook_void(struct response *res, const struct request_header *req)
+{
+    res->response_code = HTTP_METHOD_NOT_ALLOWED;
+    return ; 
+}
+void hook_trace(struct response *res, const struct request_header *req)
+{
+    const struct request_line *lp = &(req->root_line);
+    slog(LOG_WARNING,"got a TRACE request, that may cause a serious SECURITY problem");
+    res->payload_size = 0;
+    res->flag = SERVER_TRACE_DEFAULT;
+
+    lp = list_next(lp);
+    while (strcmp(lp->subject,"X-__TRACE_INFO"))
     {
-        res->response_code = HTTP_METHOD_NOT_ALLOWED;
-        return 0;
+        slog(LOG_DEBUG,"lp next. lp.subj=%s",lp->subject);
+        lp = list_next(lp);
     }
+    slog(LOG_DEBUG,"lp.subj=%s",lp->subject);
+    slog(LOG_DEBUG,"lp.va=%s",lp->value);
+    res->payload_path = lp->value;
+    res->payload_size = strlen(lp->value);
+    return;
+}
+void hook_head(struct response *res, const struct request_header *req)
+{
+    hook_get(res,req);
+    res->payload_size = 0;
+    res->flag &= ~SERVER_HAVE_PAYLOAD;
+}
+void hook_options(struct response *res, const struct request_header *req)
+{
+    res->response_code = HTTP_OK;
+    res->payload_size = 0;
+    res->flag = SERVER_OPTIONS_DEFAULT;
+    return;
+}
+void hook_get(struct response *res, const struct request_header *req)
+{
+    FILE *fp;
 
     slog(LOG_DEBUG, "res->flag: %llu", res->flag);
     slog(LOG_DEBUG, "res->http_version: %d", res->http_version);
     slog(LOG_DEBUG, "url:%s", req->url);
 
     slog(LOG_DEBUG, "trying to open:%s", req->url);
+
+    res->flag = SERVER_GET_DEFAULT;
 
     fp = fopen(req->url + 1, "rb");
     if (fp == NULL)
@@ -155,7 +221,7 @@ int build_response(struct response *res, const struct request_header *req)
         }
         slog(LOG_DEBUG, "res->response_code: %d", res->response_code);
         res->payload_size = 0;
-        return 0;
+        return ;
     }
     res->response_code = HTTP_OK;
     slog(LOG_DEBUG, "res->response_code: %d", res->response_code);
@@ -175,8 +241,8 @@ int build_response(struct response *res, const struct request_header *req)
     slog(LOG_DEBUG, "go ahead");
 
     res->payload_path = req->url + 1;
-
+    
     res->flag |= SERVER_HAVE_PAYLOAD;
 
-    return 0;
+    return ;
 }
