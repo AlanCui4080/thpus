@@ -44,14 +44,16 @@
 #define FEATURE_ACCEPT_RANGE_TEXT "Accept-Ranges: bytes\r\n"
 #define FEATURE_KEEP_ALIVE_TEXT "Connection: keep-alive\r\n"
 #define FEATURE_CLOSED_TEXT "Connection: close\r\n"
-#define FEATURE_ALLOW_TEXT "Allow: GET, OPTIONS, HEAD\r\n"
+#define FEATURE_ALLOW_TEXT "Allow: GET, OPTIONS, HEAD, TRACE\r\n"
 #define FEATURE_CONTENT_LEN "Content-Length: "
 #define FEATURE_SHOW_NAME "Server: "
 
 #define HTTP_OK 200
+#define HTTP_PARTICAL 206
 #define HTTP_FORBIDDEN 403
 #define HTTP_NOT_FOUND 404
 #define HTTP_METHOD_NOT_ALLOWED 405
+#define HTTP_RANGE_NOT_SATISFIED 416
 #define HTTP_INTERNAL_ERR 500
 #define HTTP_VERSION_NOT_SUPPPORT 505
 
@@ -62,6 +64,15 @@ struct response
     unsigned long long flag;
     char* payload_path;
     size_t payload_size;
+    size_t payload_start;
+    size_t payload_end;
+};
+
+#define HLINE_NR 1
+struct headline_hook
+{
+    char* subject;
+    void (*func)(struct response* res,const struct request_header* req,const struct request_line *lp);
 };
 
 extern int do_response(struct response* res);

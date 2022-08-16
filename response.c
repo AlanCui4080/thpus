@@ -36,22 +36,31 @@ void hook_head(struct response *res, const struct request_header *req);
 void hook_options(struct response *res, const struct request_header *req);
 void hook_trace(struct response *res, const struct request_header *req);
 
-const void (*method_hook[METHOD_NR])(struct response*, const struct request_header*) =\
+void phook_range(struct response *res, const struct request_header *req, const struct request_line *lp);
+
+const void (*method_hook[METHOD_NR])(struct response *, const struct request_header *) =
     {
-        hook_void, //CONNECT
-        hook_void, //DELETE
-        hook_get, //GET
-        hook_head, //HEAD
-        hook_options, //OPTIONS
-        hook_void, //PATCH
-        hook_void, //POST
-        hook_void, //PUT
-        hook_trace, //TRACE
-        hook_void, //Unknow
-    };
+        hook_void,    // CONNECT
+        hook_void,    // DELETE
+        hook_get,     // GET
+        hook_head,    // HEAD
+        hook_options, // OPTIONS
+        hook_void,    // PATCH
+        hook_void,    // POST
+        hook_void,    // PUT
+        hook_trace,   // TRACE
+        hook_void,    // Unknow
+};
+const struct headline_hook hline_hook[HLINE_NR] =
+    {
+        {"Range", phook_range},
+};
 int do_response(struct response *res)
 {
     slog(LOG_DEBUG, "responsee DID");
+    slog(LOG_DEBUG, "res->payload_size: %llu", res->payload_size);
+    slog(LOG_DEBUG, "res->http_version: %s", HTTP_VERSION[res->http_version]);
+
     char buf_version[HTTP_VERSION_MAX_LEN] = {0};
     char buf_code[4] = {0};
 
@@ -66,7 +75,6 @@ int do_response(struct response *res)
 
     // version
     strcpy(buf_version, HTTP_VERSION[res->http_version]);
-
     // code
     sprintf(buf_code, "%d", res->response_code);
 
@@ -88,6 +96,7 @@ int do_response(struct response *res)
     if (res->flag & SERVER_SHOW_ALLOW)
         strcat(buf_feature, FEATURE_ALLOW_TEXT);
 
+    // get them together
     strcat(buf_feature, "\r\n");
 
     strcpy(buf_header, buf_version);
@@ -96,22 +105,24 @@ int do_response(struct response *res)
     strcat(buf_header, "\r\n");
 
     strcat(buf_header, buf_feature);
-    strcat(buf_header, "\r\n\r\n");
 
+    //caculation for final buffer size
     res_size = strlen(buf_header) + res->payload_size;
     buf_res = malloc(res_size + 4);
-    memset(buf_res, 0, res_size);
+    memset(buf_res, 0, res_size + 4);
 
     memcpy(buf_res, buf_header, strlen(buf_header) + 1);
 
+    slog(LOG_DEBUG, "buf_version \n%s", buf_version);
+    slog(LOG_DEBUG, "buf_code \n%s", buf_code);
     slog(LOG_DEBUG, "buf_header \n%s", buf_header);
 
     if (!(res->flag & SERVER_HAVE_PAYLOAD))
         goto end;
-
+    //if payload_path actually points to a address instead of a filename
     if (res->flag & SERVER_PAYLOAD_LOADED)
     {
-        strcat(buf_res,res->payload_path);
+        strcat(buf_res, res->payload_path);
         goto end;
     }
 
@@ -120,8 +131,11 @@ int do_response(struct response *res)
     if (fp == NULL)
         slog(LOG_FAULT, "open failed:%s", strerror(errno));
 
-    slog(LOG_DEBUG, "trying to read");
+    slog(LOG_DEBUG, "trying to seek");
+    if (fseek(fp, res->payload_start, SEEK_SET))
+        slog(LOG_FAULT, "seek failed:%s,", strerror(errno));
 
+    slog(LOG_DEBUG, "trying to read");
     fread(buf_res + strlen(buf_header), res->payload_size, 1, fp);
     if (ferror(fp))
         slog(LOG_FAULT, "read failed:%s", strerror(errno));
@@ -138,9 +152,12 @@ end:
 }
 int build_response(struct response *res, const struct request_header *req)
 {
+    const struct request_line *lp = &(req->root_line);
+
     slog(LOG_DEBUG, "req_version: %d", req->http_version);
     slog(LOG_DEBUG, "req_method: %d", req->method);
 
+    //version settings
     if (req->http_version != HTTP_11)
     {
         res->response_code = HTTP_VERSION_NOT_SUPPPORT;
@@ -149,59 +166,89 @@ int build_response(struct response *res, const struct request_header *req)
     }
     else
         res->http_version = req->http_version;
+    //call method-specific function
+    method_hook[req->method](res, req);
+    //find and call hline-specific function
+    slog(LOG_DEBUG, "res->payload_size: %llu", res->payload_size);
+    lp = list_next(lp);
+    while (lp != NULL)
+    {
+        for (size_t i = 0; i < HLINE_NR; i++)
+        {
+            slog(LOG_DEBUG, "lp next. lp.subj=%s", lp->subject);
+            slog(LOG_DEBUG, "hline. hline.subj=%s", hline_hook[i].subject);
+            if (!strcmp(lp->subject, hline_hook[i].subject))
+            {
+                slog(LOG_DEBUG, "got a fliter");
+                hline_hook[i].func(res, req, lp);
+            }
+        }
+        lp = list_next(lp);
+    }
+    slog(LOG_DEBUG, "no more hline fliter found");
 
-    method_hook[req->method](res,req);
-    
     return 0;
 }
+//if the method is disabled
 void hook_void(struct response *res, const struct request_header *req)
 {
+    res->flag = SERVER_SHOW_NAME;
+    res->flag |= SERVER_SHOW_ALLOW;
     res->response_code = HTTP_METHOD_NOT_ALLOWED;
-    return ; 
+    res->payload_start = 0;
+    res->payload_end = 0;
+    res->payload_size = 0;
+    return;
 }
 void hook_trace(struct response *res, const struct request_header *req)
 {
     const struct request_line *lp = &(req->root_line);
-    slog(LOG_WARNING,"got a TRACE request, that may cause a serious SECURITY problem");
+    slog(LOG_WARNING, "got a TRACE request, that may cause a serious SECURITY problem");
     res->payload_size = 0;
     res->flag = SERVER_TRACE_DEFAULT;
 
     lp = list_next(lp);
-    while (strcmp(lp->subject,"X-__TRACE_INFO"))
+    while (strcmp(lp->subject, "X-__TRACE_INFO"))
     {
-        slog(LOG_DEBUG,"lp next. lp.subj=%s",lp->subject);
+        slog(LOG_DEBUG, "lp next. lp.subj=%s", lp->subject);
         lp = list_next(lp);
     }
-    slog(LOG_DEBUG,"lp.subj=%s",lp->subject);
-    slog(LOG_DEBUG,"lp.va=%s",lp->value);
+    slog(LOG_DEBUG, "lp.subj=%s", lp->subject);
+    slog(LOG_DEBUG, "lp.va=%s", lp->value);
+
+    res->response_code = 200;
     res->payload_path = lp->value;
     res->payload_size = strlen(lp->value);
+    res->payload_start = 0;
+    res->payload_end = 0;
     return;
 }
 void hook_head(struct response *res, const struct request_header *req)
 {
-    hook_get(res,req);
-    res->payload_size = 0;
+    slog(LOG_DEBUG, "hook_head");
+    hook_get(res, req);
     res->flag &= ~SERVER_HAVE_PAYLOAD;
 }
 void hook_options(struct response *res, const struct request_header *req)
 {
+    slog(LOG_DEBUG, "hook_options");
     res->response_code = HTTP_OK;
     res->payload_size = 0;
+    res->payload_start = 0;
+    res->payload_end = 0;
     res->flag = SERVER_OPTIONS_DEFAULT;
     return;
 }
 void hook_get(struct response *res, const struct request_header *req)
 {
     FILE *fp;
+    res->flag = SERVER_GET_DEFAULT;
 
     slog(LOG_DEBUG, "res->flag: %llu", res->flag);
     slog(LOG_DEBUG, "res->http_version: %d", res->http_version);
     slog(LOG_DEBUG, "url:%s", req->url);
 
     slog(LOG_DEBUG, "trying to open:%s", req->url);
-
-    res->flag = SERVER_GET_DEFAULT;
 
     fp = fopen(req->url + 1, "rb");
     if (fp == NULL)
@@ -221,7 +268,7 @@ void hook_get(struct response *res, const struct request_header *req)
         }
         slog(LOG_DEBUG, "res->response_code: %d", res->response_code);
         res->payload_size = 0;
-        return ;
+        return;
     }
     res->response_code = HTTP_OK;
     slog(LOG_DEBUG, "res->response_code: %d", res->response_code);
@@ -241,8 +288,69 @@ void hook_get(struct response *res, const struct request_header *req)
     slog(LOG_DEBUG, "go ahead");
 
     res->payload_path = req->url + 1;
-    
+    res->payload_start = 0;
+    res->payload_end = res->payload_size;
+
     res->flag |= SERVER_HAVE_PAYLOAD;
 
-    return ;
+    return;
+}
+void phook_range(struct response *res, const struct request_header *req, const struct request_line *lp)
+{
+    /*e.g.
+        Range: bytes=233-456
+                    +   +
+                    a   b
+    */
+    char *a, *b;
+    size_t start, end;
+
+    if (res->response_code != 200)
+        return;
+
+    a = strchr(lp->value, '=');
+    *a = '\0';
+    if (strcmp("bytes", lp->value))
+        goto fail;
+
+    b = strchr(a + 1, '-');
+    *b = '\0';
+    start = atoll(a + 1);
+
+    if (*(b + 1) == '\r')
+    {
+        slog(LOG_DEBUG, "a type");
+        slog(LOG_DEBUG, "a:%s", a);
+
+        res->payload_start = start;
+        res->payload_end = res->payload_size;
+        res->payload_size = res->payload_end - res->payload_start;
+        goto succeed;
+    }
+    else
+    {
+        slog(LOG_DEBUG, "ab type");
+        slog(LOG_DEBUG, "a:%s", a);
+        slog(LOG_DEBUG, "b:%s", b);
+
+        end = atoll(b + 1);
+        if (end > res->payload_size)
+            goto fail;
+        res->payload_start = start;
+        res->payload_end = end;
+        res->payload_size = res->payload_end - res->payload_start;
+        goto succeed;
+    }
+    if (strchr(b, ',') != NULL)
+        goto fail;
+
+succeed:
+    slog(LOG_DEBUG, "range start:%llu", start);
+    slog(LOG_DEBUG, "range end:%llu", end);
+    res->response_code = HTTP_PARTICAL;
+    return;
+fail:
+    res->response_code = HTTP_RANGE_NOT_SATISFIED;
+    res->flag &= ~SERVER_HAVE_PAYLOAD;
+    return;
 }

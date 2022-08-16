@@ -36,13 +36,15 @@ const char *HTTP_METHOD[HTTP_METHOD_NR] =
         "PATCH",
         "POST",
         "PUT",
-        "TRACE"};
+        "TRACE"
+    };
 
 const char *HTTP_VERSION[HTTP_VERSION_NR] =
     {
         "HTTP/1.0",
         "HTTP/1.1",
-        "HTTP/2"};
+        "HTTP/2"
+    };
 const char *seek_line_crlf(const char *src, size_t n)
 {
     size_t p = 0;
@@ -95,7 +97,7 @@ int analyse_request_line(const struct request_header *req, const char *header)
         trace->subject = "X-__TRACE_INFO";
         trace->value = malloc(strlen(header)+1);
         strcpy(trace->value,header);
-        
+
         list_put(lp,trace);
         slog(LOG_DEBUG,"added X-__TRACE_INFO");
     }

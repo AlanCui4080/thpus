@@ -79,7 +79,9 @@ int _slog(int level, const char *msg,
     {
     case LOG_DEBUG:
     case LOG_INFO:
+#ifndef DEBUG_TRACE
         break;
+#endif
     default:
         fprintf(stderr, "in ");
         fprintf(stderr, func);
