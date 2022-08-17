@@ -122,7 +122,8 @@ int do_response(struct response *res)
     //if payload_path actually points to a address instead of a filename
     if (res->flag & SERVER_PAYLOAD_LOADED)
     {
-        strcat(buf_res, res->payload_path);
+        memcpy(buf_res+strlen(buf_res), res->payload_path,res->payload_size);
+        slog(LOG_DEBUG, "dd: %s",res->payload_path);
         goto end;
     }
 
@@ -153,6 +154,7 @@ end:
 int build_response(struct response *res, const struct request_header *req)
 {
     const struct request_line *lp = &(req->root_line);
+    struct request_line *lpr = (struct request_line *)&(req->root_line);
 
     slog(LOG_DEBUG, "req_version: %d", req->http_version);
     slog(LOG_DEBUG, "req_method: %d", req->method);
@@ -219,8 +221,6 @@ void hook_trace(struct response *res, const struct request_header *req)
     res->response_code = 200;
     res->payload_path = lp->value;
     res->payload_size = strlen(lp->value);
-    res->payload_start = 0;
-    res->payload_end = 0;
     return;
 }
 void hook_head(struct response *res, const struct request_header *req)

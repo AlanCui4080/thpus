@@ -94,8 +94,9 @@ int analyse_request_line(const struct request_header *req, const char *header)
         struct request_line* trace = malloc(sizeof(struct request_line));
         list_init(trace);
 
-        trace->subject = "X-__TRACE_INFO";
-        trace->value = malloc(strlen(header)+1);
+        trace->subject = malloc(strlen("X-__TRACE_INFO")+1+strlen(header)+1);
+        strcpy(trace->subject,"X-__TRACE_INFO");
+        trace->value = trace->subject+strlen(trace->subject)+1;
         strcpy(trace->value,header);
 
         list_put(lp,trace);

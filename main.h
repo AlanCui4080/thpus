@@ -51,6 +51,9 @@ struct list_head
 //the next node
 #define list_next(v) \
     ((typeof(v))(((struct list_head*)(v))->next))
+//the previous node
+#define list_prev(v) \
+    ((typeof(v))(((struct list_head*)(v))->prev))
 enum{
     LOG_DEBUG = 1,
     LOG_INFO,

@@ -123,6 +123,21 @@ int _slog(int level, const char *msg,
         break;
     }
 }
+//release mem
+void session_gc(struct response* res,const struct request_header* req)
+{
+    struct request_line *lpr = list_next(lpr);
+    while (lpr != NULL)
+    {
+        struct request_line *_lpr;
+        slog(LOG_DEBUG,"GC: %llX",lpr);
+        free(lpr->subject);
+        _lpr = list_next(lpr);
+        free(lpr);
+        lpr = _lpr;
+    }
+    return;
+}
 void session_main(int fd)
 {
     char buf_req[1024] = {0};
@@ -138,6 +153,7 @@ void session_main(int fd)
     analyse_request_line(&req, buf_req);
     build_response(&res, &req);
     do_response(&res);
+    session_gc(&res,&req);
     return;
 }
 //to catch SIGINT and close socket safely
