@@ -88,7 +88,7 @@ int do_response(struct response *res)
         strcat(buf_feature, FEATURE_CLOSED_TEXT);
 
     if (res->flag & SERVER_CONTENT_LEN)
-        sprintf(buf_feature + strlen(buf_feature), FEATURE_CONTENT_LEN"%llu\r\n", res->payload_size);
+        sprintf(buf_feature + strlen(buf_feature), FEATURE_CONTENT_LEN "%lu\r\n", res->payload_size);
 
     if (res->flag & SERVER_SHOW_NAME)
         sprintf(buf_feature + strlen(buf_feature), "Server: " SERVER_NAME ":%d.%d-%s\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_NAME);
