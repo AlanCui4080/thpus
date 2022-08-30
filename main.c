@@ -84,7 +84,7 @@ int _slog(int level, const char *msg,
 #endif
     default:
         fprintf(stderr, "in ");
-        fprintf(stderr, func);
+        fprintf(stderr, "%s", func);
         fprintf(stderr, "(%s:%d)", file, line);
         fprintf(stderr, ": \n");
         break;
@@ -95,27 +95,27 @@ int _slog(int level, const char *msg,
     {
     case LOG_DEBUG:
         printf("[D] Session %d:", getpid());
-        printf(buf_log);
+        printf("%s", buf_log);
         printf("\n");
         break;
     case LOG_INFO:
         printf("[I] Session %d:", getpid());
-        printf(buf_log);
+        printf("%s", buf_log);
         printf("\n");
         break;
     case LOG_WARNING:
         fprintf(stderr, "[W] Session %d:", getpid());
-        fprintf(stderr, buf_log);
+        fprintf(stderr, "%s", buf_log);
         fprintf(stderr, "\n");
         break;
     case LOG_ERROR:
         fprintf(stderr, "[E] Session %d:", getpid());
-        fprintf(stderr, buf_log);
+        fprintf(stderr, "%s", buf_log);
         fprintf(stderr, "\n");
         break;
     case LOG_FAULT:
         fprintf(stderr, "[!] Session %d:", getpid());
-        fprintf(stderr, buf_log);
+        fprintf(stderr, "%s", buf_log);
         fprintf(stderr, "\n");
         session_fastfail();
         break;
