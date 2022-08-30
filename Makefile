@@ -1,5 +1,5 @@
 def:
-	gcc -Werror *.c -DDEBUG && ./a.out
+	gcc -Werror *.c -DDEBUG
 ndbg:
 	gcc -Werror *.c && ./a.out
 tr:
